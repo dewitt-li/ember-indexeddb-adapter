@@ -1,12 +1,14 @@
 DS.IndexedDBSerializer = DS.JSONSerializer.extend({
-  serializeHasMany: function(record, json, relationship) {
+  serializeHasMany: function(snapshot, json, relationship) {
     var key = relationship.key,
-        relationshipType = DS.RelationshipChange.determineRelationshipType(record.constructor, relationship);
+    var payloadKey = this.keyForRelationship ? this.keyForRelationship(key, "hasMany") : key;
+    var relationshipType = snapshot.type.determineRelationshipType(relationship);
 
     if (relationshipType === 'manyToNone' ||
         relationshipType === 'manyToMany' ||
         relationshipType === 'manyToOne') {
-      json[key] = record.get(key).mapBy('id');
+      //json[key] = record.get(key).mapBy('id');
+        json[payloadKey] = snapshot.hasMany(key, { ids: true });
     // TODO support for polymorphic manyToNone and manyToMany relationships
     }
   },
@@ -48,19 +50,15 @@ DS.IndexedDBSerializer = DS.JSONSerializer.extend({
   extractSingle: function(store, type, payload) {
     if (payload && payload._embedded) {
       for (var relation in payload._embedded) {
-        var typeName = Ember.String.singularize(relation),
+        var relType = type.typeForRelationship(relation,store);
+        var typeName = relType.modelName,
             embeddedPayload = payload._embedded[relation];
 
-        var embeddedType = store.modelFor(typeName);
-
         if (embeddedPayload) {
-          if (Object.prototype.toString.call(embeddedPayload) === '[object Array]') {
-            var normalizedItems = embeddedPayload.map(
-              function (embeddedItem) { return this.normalize(embeddedType, embeddedItem); }.bind(this)
-            );
-            store.pushMany(typeName, normalizedItems);
+          if (Ember.isArray(embeddedPayload)) {
+            store.pushMany(typeName, embeddedPayload);
           } else {
-            store.push(typeName, this.normalize(embeddedType, embeddedPayload));
+            store.push(typeName, embeddedPayload);
           }
         }
       }
@@ -81,10 +79,8 @@ DS.IndexedDBSerializer = DS.JSONSerializer.extend({
    * @param {Array} payload returned JSONs
    */
   extractArray: function(store, type, payload) {
-    var serializer = this;
-
-    return payload.map(function(record) {
-      return serializer.extractSingle(store, type, record);
-    });
-  }
+    return payload.map(function(json) {
+        return this.extractSingle(store, type, json);
+      }, this);
+    }
 });
