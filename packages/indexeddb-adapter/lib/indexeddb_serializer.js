@@ -1,6 +1,6 @@
 DS.IndexedDBSerializer = DS.JSONSerializer.extend({
   serializeHasMany: function(snapshot, json, relationship) {
-    var key = relationship.key,
+    var key = relationship.key;
     var payloadKey = this.keyForRelationship ? this.keyForRelationship(key, "hasMany") : key;
     var relationshipType = snapshot.type.determineRelationshipType(relationship);
 
