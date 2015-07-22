@@ -1,7 +1,6 @@
 /*global Ember*/
 /*global DS*/
 'use strict';
-
 DS.IndexedDBAdapter = DS.Adapter.extend({
   databaseName: 'IDBAdapter',
   databaseVersion:1,
@@ -46,6 +45,8 @@ DS.IndexedDBAdapter = DS.Adapter.extend({
       } else {
           return Ember.RSVP.resolve(record);
       }
+    }).then(function(records){
+      return Ember.RSVP.resolve(adapter.toJSONAPI(store,type,records));
     });
   },
 
@@ -70,6 +71,8 @@ DS.IndexedDBAdapter = DS.Adapter.extend({
       } else {
           return Ember.RSVP.resolve(records);
       }
+    }).then(function(records){
+      return Ember.RSVP.resolve(adapter.toJSONAPI(store,type,records));
     });
   },
 
@@ -101,6 +104,8 @@ DS.IndexedDBAdapter = DS.Adapter.extend({
     })
     .then(function(records){
       return adapter.loadRelationshipsForMany(store, type, records);
+    }).then(function(records){
+      return Ember.RSVP.resolve(adapter.toJSONAPI(store,type,records));
     });
   },
 
@@ -120,9 +125,47 @@ DS.IndexedDBAdapter = DS.Adapter.extend({
       return adapter.loadIdsForMany(store,type,records);
     }).then(function(records){
       return adapter.loadRelationshipsForMany(store, type, records, opts&&opts.adapterOptions);
+    }).then(function(records){
+      return Ember.RSVP.resolve(adapter.toJSONAPI(store,type,records));
     });
   },
+  toJSONAPI: function(store,type, record){
+    var adapter=this;
+    var included=[];
+    if(Ember.isArray(record)){
+      return {data:record.map(function(single){return toJSONAPISingle(type,single,included);},this),included:included};
+    }else{
+      return {data:toJSONAPISingle(type,record,included),included:included};
+    }
+    function toJSONAPISingle(type,record,included){
+      var data={id:record["id"],type:type.modelName,attributes:{},relationships:{}};
+      var relationships=adapter.getRelationships(type);
+      for(var field in record){
+        if (record.hasOwnProperty(field)){
+          if(field==="__included__"){
+            if(record["__included__"]){
+              Ember.$.merge(included,record["__included__"]);
+            }
+          }else if(relationships.indexOf(field)>=0){
+            data.relationships[field.dasherize()]={data:toRelationshipData(type.typeForRelationship(field,store).modelName,record[field])};
+          }else{
+            data.attributes[field.dasherize()] = record[field];
+          }
+        }
+      }
+      return data;
+    }
+    function toRelationshipData(type,value){
+      if(Ember.isArray(value)){
+        return value.map(function(id){return {type:type,id:(id?id:null)}});
+      }else{
+        return {type:type,id:(value?value:null)};
+      }
+    }
+  },
 
+
+  
   /**
    * Creates a record in the database.
    *
@@ -217,10 +260,10 @@ DS.IndexedDBAdapter = DS.Adapter.extend({
     var relationshipsPromises=[];
     var tableName,columnName,promise;
     relationshipNames.forEach(function(relationshipName){
-      tableName=adapter.relationshipProperties(type, relationshipName).type.modelName.camelize();
+      tableName=adapter.relationshipProperties(type, relationshipName).type.camelize();
       columnName=type.modelName.camelize();
-      promise= adapter.get("db")[tableName].where(columnName).equals(record.id).keys().then(function(ids){
-        record[relationshipName]=ids;
+      promise= adapter.get("db")[tableName].where(columnName).equals(record.id).toArray().then(function(gameTiers){
+        record[relationshipName]=gameTiers.map(function(gameTier){ return gameTier.id;});
         return Ember.RSVP.resolve(record);
         });
       relationshipsPromises.push(promise);
@@ -264,8 +307,10 @@ DS.IndexedDBAdapter = DS.Adapter.extend({
 
       if(relationType == 'hasMany' && relationEmbeddedId.length>0){
           promise = adapter.findMany(store, relationModel, relationEmbeddedId, opts);
-      }else if (relationType === 'belongsTo' || relationType === 'hasOne') {
+      }else if ((relationType === 'belongsTo' || relationType === 'hasOne') && relationEmbeddedId) {
           promise = adapter.findRecord(store, relationModel, relationEmbeddedId, opts);
+      }else if(!relationEmbeddedId){
+        record[relationName]=null;
       } 
 
       if(promise){
@@ -281,10 +326,11 @@ DS.IndexedDBAdapter = DS.Adapter.extend({
   },
 
   addEmbeddedPayload: function(payload, relationshipName, relationshipRecord) {
-    if ((relationshipRecord && relationshipRecord.id)
-      ||(relationshipRecord && relationshipRecord.length && relationshipRecord.isEvery("id"))) {
-        payload['_embedded'] = payload['_embedded']||{};
-        payload['_embedded'][relationshipName] = relationshipRecord;
+    payload['__included__'] = payload['__included__']||[];
+    if (relationshipRecord && relationshipRecord.data && relationshipRecord.data.id){
+      payload['__included__'].push(relationshipRecord.data);
+    }else if(relationshipRecord && relationshipRecord.data && relationshipRecord.data.length && relationshipRecord.data.isEvery("id")) {
+        Ember.$.merge(payload['__included__'],relationshipRecord.data );
     }
     return payload;
   },

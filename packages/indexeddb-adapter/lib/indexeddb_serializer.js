@@ -1,86 +1,109 @@
-DS.IndexedDBSerializer = DS.JSONSerializer.extend({
-  serializeHasMany: function(snapshot, json, relationship) {
-    var key = relationship.key;
-    var payloadKey = this.keyForRelationship ? this.keyForRelationship(key, "hasMany") : key;
-    var relationshipType = snapshot.type.determineRelationshipType(relationship);
+DS.IndexedDBSerializer = DS.JSONAPISerializer.extend({
+  
+    /**
+    @method serialize
+    @param {DS.Snapshot} snapshot
+    @param {Object} options
+    @return {Object} json
+  */
+   serialize: function(snapshot, options) {
+    var json = {};
 
-    if (relationshipType === 'manyToNone' ||
-        relationshipType === 'manyToMany' ||
-        relationshipType === 'manyToOne') {
-      //json[key] = record.get(key).mapBy('id');
-        json[payloadKey] = snapshot.hasMany(key, { ids: true });
-    // TODO support for polymorphic manyToNone and manyToMany relationships
+    if (options && options.includeId) {
+      var id = snapshot.id;
+
+      if (id) {
+        json[get(this, 'primaryKey')] = id;
+      }
     }
-  },
-  /**
-   * Extracts whatever was returned from the adapter.
-   *
-   * If the adapter returns relationships in an embedded way, such as follows:
-   *
-   * ```js
-   * {
-   *   "id": 1,
-   *   "title": "Rails Rambo",
-   *
-   *   "_embedded": {
-   *     "comment": [{
-   *       "id": 1,
-   *       "comment_title": "FIRST"
-   *     }, {
-   *       "id": 2,
-   *       "comment_title": "Rails is unagi"
-   *     }]
-   *   }
-   * }
-   *
-   * this method will create separated JSON for each resource and then push
-   * them individually to the Store.
-   *
-   * In the end, only the main resource will remain, containing the ids of its
-   * relationships. Given the relations are already in the Store, we will
-   * return a JSON with the main resource alone. The Store will sort out the
-   * associations by itself.
-   *
-   * @method extractSingle
-   * @private
-   * @param {DS.Store} store the returned store
-   * @param {DS.Model} type the type/model
-   * @param {Object} payload returned JSON
-   */
-  extractSingle: function(store, type, payload) {
-    if (payload && payload._embedded) {
-      for (var relation in payload._embedded) {
-        var relType = type.typeForRelationship(relation,store);
-        var typeName = relType.modelName,
-            embeddedPayload = payload._embedded[relation];
 
-        if (embeddedPayload) {
-          if (Ember.isArray(embeddedPayload)) {
-            store.pushMany(typeName, embeddedPayload);
-          } else {
-            store.push(typeName, embeddedPayload);
-          }
-        }
+    snapshot.eachAttribute(function(key, attribute) {
+      this.serializeAttribute(snapshot, json, key, attribute);
+    }, this);
+
+    snapshot.eachRelationship(function(key, relationship) {
+      if (relationship.kind === 'belongsTo') {
+        this.serializeBelongsTo(snapshot, json, relationship);
+      } else if (relationship.kind === 'hasMany') {
+        this.serializeHasMany(snapshot, json, relationship);
+      }
+    }, this);
+
+    return json;
+  },
+
+
+  /**
+   @method serializeAttribute
+   @param {DS.Snapshot} snapshot
+   @param {Object} json
+   @param {String} key
+   @param {Object} attribute
+  */
+serializeAttribute: function(snapshot, json, key, attribute) {
+    var type = attribute.type;
+
+    if (this._canSerialize(key)) {
+      var value = snapshot.attr(key);
+      if (type) {
+        var transform = this.transformFor(type);
+        value = transform.serialize(value);
       }
 
-      delete payload._embedded;
-    }
+      // if provided, use the mapping provided by `attrs` in
+      // the serializer
+      var payloadKey =  this._getMappedKey(key);
 
-    return this.normalize(type, payload);
+      if (payloadKey === key && this.keyForAttribute) {
+        payloadKey = this.keyForAttribute(key, 'serialize');
+      }
+
+      json[payloadKey] = value;
+    }
+  },
+  /**
+   @method serializeBelongsTo
+   @param {DS.Snapshot} snapshot
+   @param {Object} json
+   @param {Object} relationship
+  */
+ serializeBelongsTo: function(snapshot, json, relationship) {
+    var key = relationship.key;
+
+    if (this._canSerialize(key)) {
+      var belongsToId = snapshot.belongsTo(key, { id: true });
+
+      // if provided, use the mapping provided by `attrs` in
+      // the serializer
+      var payloadKey = this._getMappedKey(key);
+      if (payloadKey === key && this.keyForRelationship) {
+        payloadKey = this.keyForRelationship(key, "belongsTo", "serialize");
+      }
+
+      //Need to check whether the id is there for new&async records
+      if (isNone(belongsToId)) {
+        json[payloadKey] = null;
+      } else {
+        json[payloadKey] = belongsToId;
+      }
+
+      if (relationship.options.polymorphic) {
+        this.serializePolymorphicType(snapshot, json, relationship);
+      }
+    }
   },
 
   /**
-   * This is exactly the same as extractSingle, but used in an array.
-   *
-   * @method extractSingle
-   * @private
-   * @param {DS.Store} store the returned store
-   * @param {DS.Model} type the type/model
-   * @param {Array} payload returned JSONs
-   */
-  extractArray: function(store, type, payload) {
-    return payload.map(function(json) {
-        return this.extractSingle(store, type, json);
-      }, this);
-    }
+   @method serializeHasMany
+   @param {DS.Snapshot} snapshot
+   @param {Object} json
+   @param {Object} relationship
+  */
+  serializeHasMany: function(snapshot, json, relationship) {
+  },
+  modelNameFromPayloadKey: function(key) {
+    return key;
+  },
 });
+
+
