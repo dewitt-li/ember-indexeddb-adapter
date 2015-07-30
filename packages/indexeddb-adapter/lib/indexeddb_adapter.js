@@ -152,7 +152,9 @@ DS.IndexedDBAdapter = DS.Adapter.extend({
             }
           }else if(relationships.indexOf(field)>=0){
             var relationData=toRelationshipData(type.typeForRelationship(field,store).modelName,record[field]);
-            data.relationships[field.dasherize()]={data:relationData};
+            if(relationData.id || Ember.isArray(relationData)){
+              data.relationships[field.dasherize()]={data:relationData};
+            }
           }else{
             data.attributes[field.dasherize()] = record[field];
           }
