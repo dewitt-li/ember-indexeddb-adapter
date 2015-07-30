@@ -36,12 +36,10 @@ DS.IndexedDBAdapter = DS.Adapter.extend({
   findRecord: function (store, type, id, opts) {
     var adapter = this;
     var allowRecursive = this.allowRecursive(opts,true);
-    return this.get("db")[type.modelName.camelize()].filter(function(record){
-      return record.id && record.id==id;
-    }).toArray()
-    .then(function(records){
-      if(records.length>0){
-        return adapter.loadIds(store,type,records[0]);
+    return this.get("db")[type.modelName.camelize()].get(id)
+    .then(function(record){
+      if(record){
+        return adapter.loadIds(store,type,record);
       }else{
         return Ember.RSVP.reject("can not find "+type+" by id "+id);
       }
@@ -52,7 +50,7 @@ DS.IndexedDBAdapter = DS.Adapter.extend({
           return Ember.RSVP.resolve(record);
       }
     }).then(function(records){
-      return Ember.RSVP.resolve(adapter.toJSONAPI(store,type,records));
+      return adapter.toJSONAPI(store,type,records);
     });
   },
 
@@ -73,12 +71,12 @@ DS.IndexedDBAdapter = DS.Adapter.extend({
       return adapter.loadIdsForMany(store,type,records);
     }).then(function(records){
       if (allowRecursive) {
-        return adapter.loadRelationshipsForMany(type, records, opts&&opts.adapterOptions);
+        return adapter.loadRelationshipsForMany(store,type, records, opts&&opts.adapterOptions);
       } else {
           return Ember.RSVP.resolve(records);
       }
     }).then(function(records){
-      return Ember.RSVP.resolve(adapter.toJSONAPI(store,type,records));
+      return adapter.toJSONAPI(store,type,records);
     });
   },
 
@@ -154,9 +152,7 @@ DS.IndexedDBAdapter = DS.Adapter.extend({
             }
           }else if(relationships.indexOf(field)>=0){
             var relationData=toRelationshipData(type.typeForRelationship(field,store).modelName,record[field]);
-            if(relationData.id){
-              data.relationships[field.dasherize()]={data:relationData};
-            }
+            data.relationships[field.dasherize()]={data:relationData};
           }else{
             data.attributes[field.dasherize()] = record[field];
           }
