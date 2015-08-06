@@ -6,14 +6,14 @@ DS.IndexedDBSerializer = DS.JSONAPISerializer.extend({
     @param {Object} options
     @return {Object} json
   */
-   serialize: function(snapshot, options) {
+  serialize: function(snapshot, options) {
     var json = {};
 
     if (options && options.includeId) {
       var id = snapshot.id;
 
       if (id) {
-        json[get(this, 'primaryKey')] = id;
+        json[Ember.get(this, 'primaryKey')] = id;
       }
     }
 
@@ -58,7 +58,7 @@ serializeAttribute: function(snapshot, json, key, attribute) {
         payloadKey = this.keyForAttribute(key, 'serialize');
       }
 
-      json[payloadKey] = value;
+      json[payloadKey.camelize()] = value;
     }
   },
   /**
@@ -81,7 +81,7 @@ serializeAttribute: function(snapshot, json, key, attribute) {
       }
 
       //Need to check whether the id is there for new&async records
-      if (isNone(belongsToId)) {
+      if (Ember.isNone(belongsToId)) {
         json[payloadKey] = null;
       } else {
         json[payloadKey] = belongsToId;
@@ -105,5 +105,3 @@ serializeAttribute: function(snapshot, json, key, attribute) {
     return key;
   },
 });
-
-

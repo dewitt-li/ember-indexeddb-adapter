@@ -1,6 +1,6 @@
 /*global Ember*/
 /*global DS*/
-'use strict';
+ 
 DS.IndexedDBAdapter = DS.Adapter.extend({
   databaseName: 'IDBAdapter',
   databaseVersion:1,
@@ -312,7 +312,7 @@ DS.IndexedDBAdapter = DS.Adapter.extend({
           promise=null, embedPromise;
       var opts = {allowRecursive: false};
 
-      if(relationType == 'hasMany' && relationEmbeddedId.length>0){
+      if(relationType == 'hasMany' && relationEmbeddedId && relationEmbeddedId.length>0){
           promise = adapter.findMany(store, relationModel, relationEmbeddedId, opts);
       }else if ((relationType === 'belongsTo' || relationType === 'hasOne') && relationEmbeddedId) {
           promise = adapter.findRecord(store, relationModel, relationEmbeddedId, opts);
