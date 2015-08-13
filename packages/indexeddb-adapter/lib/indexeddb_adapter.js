@@ -156,7 +156,13 @@ DS.IndexedDBAdapter = DS.Adapter.extend({
               data.relationships[field.dasherize()]={data:relationData};
             }
           }else{
-            data.attributes[field.dasherize()] = record[field];
+            //temp fix as the outsystems is not handling null date time type normally
+            var attribute=Ember.get(type,"attributes").get(field);
+            if(attribute && attribute.type==="date" && record[field]==="00:00:00"){
+              data.attributes[field.dasherize()] = null;
+            }else{
+              data.attributes[field.dasherize()] = record[field];
+            }
           }
         }
       }

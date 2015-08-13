@@ -54,10 +54,6 @@ serializeAttribute: function(snapshot, json, key, attribute) {
       // the serializer
       var payloadKey =  this._getMappedKey(key);
 
-      if (payloadKey === key && this.keyForAttribute) {
-        payloadKey = this.keyForAttribute(key, 'serialize');
-      }
-
       json[payloadKey.camelize()] = value;
     }
   },
