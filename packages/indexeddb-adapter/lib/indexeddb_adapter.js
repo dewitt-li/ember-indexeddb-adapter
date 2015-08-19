@@ -197,6 +197,9 @@ DS.IndexedDBAdapter = DS.Adapter.extend({
     var adapter=this;
     var table=this.get("db")[type.modelName.camelize()];
     var serialized = this.serialize(snapshot,{includeId:!table.schema.primKey.auto});
+    if(!serialized["data_status"]){
+      serialized["data_status"]='n';
+    }
     return table.add(serialized).then(function(){
       return adapter.loadRelationships(store,type,serialized);
     });
@@ -213,6 +216,9 @@ DS.IndexedDBAdapter = DS.Adapter.extend({
     var adapter=this;
     var table=this.get("db")[type.modelName.camelize()];
     var serialized = this.serialize(snapshot,{includeId:!table.schema.primKey.auto});
+    if(serialized["data_status"]==='s'){
+      serialized["data_status"]='u';
+    }
     return table.put(serialized).then(function(){
       return Ember.RSVP.resolve(serialized);
     });
@@ -226,9 +232,19 @@ DS.IndexedDBAdapter = DS.Adapter.extend({
    * @param {Object} snapshot
    */
   deleteRecord: function (store, type, snapshot) {
-    return this.get("db")[type.modelName.camelize()].delete(snapshot.id).then(function(){
-      return Ember.RSVP.resolve(serialized);
-    });
+    if(snapshot.attr("data_status")!=="s" && snapshot.attr("data_status")!=="u"){
+      return this.get("db")[type.modelName.camelize()].delete(snapshot.id).then(function(){
+        return Ember.RSVP.resolve(serialized);
+      });
+    }else{
+      var adapter=this;
+      var table=this.get("db")[type.modelName.camelize()];
+      var serialized = this.serialize(snapshot,{includeId:!table.schema.primKey.auto});
+      serialized["data_status"]="d";
+      return table.put(serialized).then(function(){
+        return Ember.RSVP.resolve(serialized);
+      });
+    }
   },
 
   /**
