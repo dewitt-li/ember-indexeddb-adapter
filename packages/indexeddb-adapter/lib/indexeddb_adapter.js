@@ -202,6 +202,8 @@ DS.IndexedDBAdapter = DS.Adapter.extend({
     }
     return table.add(serialized).then(function(){
       return adapter.loadRelationships(store,type,serialized);
+    }).then(function(record){
+      return adapter.toJSONAPI(store,type,record);
     });
   },
 
@@ -220,7 +222,9 @@ DS.IndexedDBAdapter = DS.Adapter.extend({
       serialized["data_status"]='u';
     }
     return table.put(serialized).then(function(){
-      return Ember.RSVP.resolve(serialized);
+      return adapter.loadRelationships(store,type,serialized);
+    }).then(function(record){
+      return adapter.toJSONAPI(store,type,record);
     });
   },
 
@@ -234,7 +238,7 @@ DS.IndexedDBAdapter = DS.Adapter.extend({
   deleteRecord: function (store, type, snapshot) {
     if(snapshot.attr("data_status")!=="s" && snapshot.attr("data_status")!=="u"){
       return this.get("db")[type.modelName.camelize()].delete(snapshot.id).then(function(){
-        return Ember.RSVP.resolve(serialized);
+        return Ember.RSVP.resolve(snapshot.id);
       });
     }else{
       var adapter=this;
@@ -242,7 +246,7 @@ DS.IndexedDBAdapter = DS.Adapter.extend({
       var serialized = this.serialize(snapshot,{includeId:!table.schema.primKey.auto});
       serialized["data_status"]="d";
       return table.put(serialized).then(function(){
-        return Ember.RSVP.resolve(serialized);
+        return Ember.RSVP.resolve(snapshot.id);
       });
     }
   },
