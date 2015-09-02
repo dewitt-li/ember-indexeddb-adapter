@@ -13,7 +13,7 @@ DS.IndexedDBSerializer = DS.JSONAPISerializer.extend({
       var id = snapshot.id;
 
       if (id) {
-        json[get(this, 'primaryKey')] = id;
+        json[Ember.get(this, 'primaryKey')] = id;
       }
     }
 
@@ -26,6 +26,8 @@ DS.IndexedDBSerializer = DS.JSONAPISerializer.extend({
         this.serializeBelongsTo(snapshot, json, relationship);
       } else if (relationship.kind === 'hasMany') {
         this.serializeHasMany(snapshot, json, relationship);
+      } else if (relationship.kind === 'hasOne') {
+        this.serializeHasOne(snapshot, json, relationship);
       }
     }, this);
 
@@ -54,11 +56,7 @@ serializeAttribute: function(snapshot, json, key, attribute) {
       // the serializer
       var payloadKey =  this._getMappedKey(key);
 
-      if (payloadKey === key && this.keyForAttribute) {
-        payloadKey = this.keyForAttribute(key, 'serialize');
-      }
-
-      json[payloadKey] = value;
+      json[payloadKey.camelize()] = value;
     }
   },
   /**
@@ -81,7 +79,7 @@ serializeAttribute: function(snapshot, json, key, attribute) {
       }
 
       //Need to check whether the id is there for new&async records
-      if (isNone(belongsToId)) {
+      if (Ember.isNone(belongsToId)) {
         json[payloadKey] = null;
       } else {
         json[payloadKey] = belongsToId;
@@ -100,10 +98,13 @@ serializeAttribute: function(snapshot, json, key, attribute) {
    @param {Object} relationship
   */
   serializeHasMany: function(snapshot, json, relationship) {
-  }
+  },
+  serializeHasOne: function(snapshot, json, relationship) {
+  },
+  modelNameFromPayloadKey: function(key) {
+    return key;
+  },
 });
-
-
 /*global Ember*/
 /*global DS*/
 'use strict';
@@ -117,164 +118,11 @@ serializeAttribute: function(snapshot, json, key, attribute) {
  */
 DS.IndexedDBSmartSearch = Ember.Object.extend({
 
-  field:       null,
-  queryString: null,
-  record:      null,
-  type:        null,
-
-  /**
-   * The entrypoint. It tries to match the current query field against the
-   * record. See below each query explained.
-   *
-   * == Search ==
-   *
-   *     store.findQuery('person', {search: "rao"})
-   *
-   * This will will search for any field that has the string rao, such as
-   * "Rambo".
-   *
-   * == Search ==
-   *
-   *     store.findQuery('person', {createdAt: "32 days ago"})
-   *
-   * Given `createdAt` field has a transform type `date`, it will returns only
-   * records that match the 32nd day ago.
-   *
-   * If the fields doesn't have the `date` transform, nothing is queried.
-   *
-   * Besides `x days ago`, `today` and `yesterday` are also accepted.
-   */
-  isMatch: function() {
-    var record      = this.get('record'),
-        type        = this.get('type'),
-        field       = this.get('field'),
-        queryString = this.get('queryString'),
-        fieldType   = this.fieldType(field),
-        queryType;
-
-    if (fieldType === "search") {
-      queryType = 'searchField';
-    } else if (fieldType === "date") {
-      queryType = 'dateField';
-    } else {
-      queryType = 'regularField';
-    }
-
-    return this[queryType](type, record, field, queryString);
-  },
-
-  /**
-   * Searches for string in any field. Consider the following query:
-   *
-   *     store.findQuery('person', {search: "rmbo"})
-   *
-   * This would match a field such as `{name: "Rambo"}`.
-   *
-   * @method searchField
-   */
-  searchField: function(type, record, field, queryString) {
-    var isMatch;
-
-    for (var queriedField in record) {
-      var isSearchField = this.get('fieldSearchCriteria')(queriedField, type),
-          fieldValue = record[queriedField];
-
-      if (!isSearchField)
-        continue;
-
-      if (!queryString || queryString == " ") { return false; }
-
-      if (Object.prototype.toString.call(queryString).match("RegExp")) {
-        isMatch = isMatch || new RegExp(queryString).test(fieldValue);
-      } else {
-        isMatch = isMatch || (fieldValue === queryString);
-
-        var str,
-            strArray = [];
-
-        for (var i = 0, len = queryString.length; i < len; i++) {
-          strArray.push(queryString[i]);
-        }
-
-        str = new RegExp(strArray.join(".*"), "i");
-        isMatch = isMatch || new RegExp(str).test(fieldValue);
-      }
-    }
-
-    return isMatch;
-  },
-
-  dateField: function(type, record, field, queryString) {
-    var rawValue = record[field],
-        date = (new Date(Date.parse(rawValue))),
-        targetDate = new Date(),
-        match;
-
-    var IsMatchToDate = function(targetDate) {
-      var year   = targetDate.getFullYear(),
-          month  = targetDate.getMonth(),
-          day    = targetDate.getDate(),
-          hour   = targetDate.getHours(),
-          minute = targetDate.getMinutes();
-
-      if (date.getFullYear() == year &&
-          date.getMonth()    == month &&
-          date.getDate()     == day) {
-        return true;
-      }
-    }
-
-    if (queryString === "today") {
-      if (IsMatchToDate(targetDate)) {
-        return true;
-      }
-    } else if (queryString === "yesterday") {
-      targetDate.setDate(targetDate.getDate() - 1);
-      if (IsMatchToDate(targetDate)) {
-        return true;
-      }
-    } else if (match = queryString.match(/([0-9]{1,}) days ago/i)) {
-      targetDate.setDate(targetDate.getDate() - match[1]);
-      if (IsMatchToDate(targetDate)) {
-        return true;
-      }
-    }
-
-    return false;
-  },
-
-  regularField: function(type, record, field, queryString) {
-    var queriedField = record[field];
-
-    if (Object.prototype.toString.call(queryString).match("RegExp")) {
-      return new RegExp(queryString).test(queriedField);
-    } else {
-      return (queriedField === queryString);
-    }
-  },
-
-  fieldType: function(fieldName) {
-    if (fieldName === "search") {
-      return "search";
-    } else {
-      var type = this.get('type'),
-          transform;
-
-      type.eachTransformedAttribute(function(name, type) {
-        if (name == fieldName) {
-          transform = type;
-        }
-      });
-
-      return transform;
-    }
-  }
 });
 
 /*global Ember*/
 /*global DS*/
-'use strict';
-
+ 
 DS.IndexedDBAdapter = DS.Adapter.extend({
   databaseName: 'IDBAdapter',
   databaseVersion:1,
@@ -312,15 +160,19 @@ DS.IndexedDBAdapter = DS.Adapter.extend({
     var allowRecursive = this.allowRecursive(opts,true);
     return this.get("db")[type.modelName.camelize()].get(id)
     .then(function(record){
-      return adapter.loadIds(store,type,record);
+      if(record){
+        return adapter.loadIds(store,type,record);
+      }else{
+        return Ember.RSVP.reject("can not find "+type+" by id "+id);
+      }
     }).then(function(record){
       if (allowRecursive) {
-        return adapter.loadRelationships(type, record, opts&&opts.adapterOptions);
+        return adapter.loadRelationships(store, type, record, opts&&opts.adapterOptions);
       } else {
           return Ember.RSVP.resolve(record);
       }
     }).then(function(records){
-      return Ember.RSVP.resolve(adapter.toJSONAPI(type,records));
+      return adapter.toJSONAPI(store,type,records);
     });
   },
 
@@ -341,12 +193,12 @@ DS.IndexedDBAdapter = DS.Adapter.extend({
       return adapter.loadIdsForMany(store,type,records);
     }).then(function(records){
       if (allowRecursive) {
-        return adapter.loadRelationshipsForMany(type, records, opts&&opts.adapterOptions);
+        return adapter.loadRelationshipsForMany(store,type, records, opts&&opts.adapterOptions);
       } else {
           return Ember.RSVP.resolve(records);
       }
     }).then(function(records){
-      return Ember.RSVP.resolve(adapter.toJSONAPI(type,records));
+      return adapter.toJSONAPI(store,type,records);
     });
   },
 
@@ -372,14 +224,14 @@ DS.IndexedDBAdapter = DS.Adapter.extend({
         }
       }
       return true;
-    }).toArray()
+    })
+    .toArray()
     .then(function(records){
       return adapter.loadIdsForMany(store,type,records);
-    })
-    .then(function(records){
+    }).then(function(records){
       return adapter.loadRelationshipsForMany(store, type, records);
     }).then(function(records){
-      return Ember.RSVP.resolve(adapter.toJSONAPI(type,records));
+      return adapter.toJSONAPI(store,type,records);
     });
   },
 
@@ -400,37 +252,43 @@ DS.IndexedDBAdapter = DS.Adapter.extend({
     }).then(function(records){
       return adapter.loadRelationshipsForMany(store, type, records, opts&&opts.adapterOptions);
     }).then(function(records){
-      return Ember.RSVP.resolve(adapter.toJSONAPI(type,records));
+      return adapter.toJSONAPI(store,type,records);
     });
   },
-  toJSONAPI: function(type, record){
+  toJSONAPI: function(store,type, record){
+    var adapter=this;
     var included=[];
     if(Ember.isArray(record)){
-      return {data:record.map(function(single){return this.toJSONAPI(type,single,included);},this),included:included};
+      return {data:record.map(function(single){return toJSONAPISingle(type,single,included);},this),included:included};
     }else{
       return {data:toJSONAPISingle(type,record,included),included:included};
     }
     function toJSONAPISingle(type,record,included){
-      var result={id:record[id],type:type.modelName,attributes:{},relationships:{}};
-      var relationships=this.getRelationships(type);
+      var data={id:record["id"],type:type.modelName,attributes:{},relationships:{}};
+      var relationships=adapter.getRelationships(type);
       for(var field in record){
         if (record.hasOwnProperty(field)){
           if(field==="__included__"){
             if(record["__included__"]){
-              for(var subType in record["__included__"]){
-                if (record["__included__"].hasOwnProperty(subType)){
-                  included.concat(record["__included__"][subType].map(function(subRecord){
-                    return toJSONAPISingle(type.typeForRelationship(subType),subRecord,[]);});
-                }
+              Ember.$.merge(included,record["__included__"]);
             }
           }else if(relationships.indexOf(field)>=0){
-            result.relationships[field]={data:toRelationshipData(type.typeForRelationship(field).modelName,record[field])};
+            var relationData=toRelationshipData(type.typeForRelationship(field,store).modelName,record[field]);
+            if(relationData.id || Ember.isArray(relationData)){
+              data.relationships[field.dasherize()]={data:relationData};
+            }
           }else{
-            result.attributes[key] = record[field];
+            //temp fix as the outsystems is not handling null date time type normally
+            var attribute=Ember.get(type,"attributes").get(field);
+            if(attribute && attribute.type==="date" && record[field]==="00:00:00"){
+              data.attributes[field.dasherize()] = null;
+            }else{
+              data.attributes[field.dasherize()] = record[field];
+            }
           }
         }
       }
-      return result;
+      return data;
     }
     function toRelationshipData(type,value){
       if(Ember.isArray(value)){
@@ -440,6 +298,7 @@ DS.IndexedDBAdapter = DS.Adapter.extend({
       }
     }
   },
+
 
   
   /**
@@ -460,8 +319,13 @@ DS.IndexedDBAdapter = DS.Adapter.extend({
     var adapter=this;
     var table=this.get("db")[type.modelName.camelize()];
     var serialized = this.serialize(snapshot,{includeId:!table.schema.primKey.auto});
+    if(!serialized["data_status"]){
+      serialized["data_status"]='n';
+    }
     return table.add(serialized).then(function(){
       return adapter.loadRelationships(store,type,serialized);
+    }).then(function(record){
+      return adapter.toJSONAPI(store,type,record);
     });
   },
 
@@ -476,8 +340,13 @@ DS.IndexedDBAdapter = DS.Adapter.extend({
     var adapter=this;
     var table=this.get("db")[type.modelName.camelize()];
     var serialized = this.serialize(snapshot,{includeId:!table.schema.primKey.auto});
+    if(serialized["data_status"]==='s'){
+      serialized["data_status"]='u';
+    }
     return table.put(serialized).then(function(){
-      return Ember.RSVP.resolve(serialized);
+      return adapter.loadRelationships(store,type,serialized);
+    }).then(function(record){
+      return adapter.toJSONAPI(store,type,record);
     });
   },
 
@@ -489,9 +358,19 @@ DS.IndexedDBAdapter = DS.Adapter.extend({
    * @param {Object} snapshot
    */
   deleteRecord: function (store, type, snapshot) {
-    return this.get("db")[type.modelName.camelize()].delete(snapshot.id).then(function(){
-      return Ember.RSVP.resolve(serialized);
-    });
+    if(snapshot.attr("data_status")!=="s" && snapshot.attr("data_status")!=="u"){
+      return this.get("db")[type.modelName.camelize()].delete(snapshot.id).then(function(){
+        return Ember.RSVP.resolve(snapshot.id);
+      });
+    }else{
+      var adapter=this;
+      var table=this.get("db")[type.modelName.camelize()];
+      var serialized = this.serialize(snapshot,{includeId:!table.schema.primKey.auto});
+      serialized["data_status"]="d";
+      return table.put(serialized).then(function(){
+        return Ember.RSVP.resolve(snapshot.id);
+      });
+    }
   },
 
   /**
@@ -532,14 +411,19 @@ DS.IndexedDBAdapter = DS.Adapter.extend({
   },
   loadIds: function(store, type, record){
     var adapter=this;
-    var relationshipNames = Ember.get(type, 'relationshipNames').hasMany;
+    var relationshipNames = Ember.get(type, 'relationshipNames').hasMany.concat(Ember.get(type, 'relationshipNames').hasOne);
+    var relationshipsByName= Ember.get(type, 'relationshipsByName');
     var relationshipsPromises=[];
     var tableName,columnName,promise;
     relationshipNames.forEach(function(relationshipName){
       tableName=adapter.relationshipProperties(type, relationshipName).type.camelize();
       columnName=type.modelName.camelize();
-      promise= adapter.get("db")[tableName].where(columnName).equals(record.id).toArray().then(function(gameTiers){
-        record[relationshipName]=gameTiers.map(function(gameTier){ return gameTier.id;});
+      promise= adapter.get("db")[tableName].where(columnName).equals(record.id).toArray().then(function(subRercords){
+        if(relationshipsByName.get(relationshipName).kind==='hasMany'){
+          record[relationshipName]=subRercords.map(function(subRecord){ return subRecord.id;});
+        }else if(relationshipsByName.get(relationshipName).kind==='hasOne'){
+          record[relationshipName]=Ember.isArray(subRercords)&&subRercords.length>0?subRercords[0].id:null;
+        }
         return Ember.RSVP.resolve(record);
         });
       relationshipsPromises.push(promise);
@@ -581,7 +465,7 @@ DS.IndexedDBAdapter = DS.Adapter.extend({
           promise=null, embedPromise;
       var opts = {allowRecursive: false};
 
-      if(relationType == 'hasMany' && relationEmbeddedId.length>0){
+      if(relationType == 'hasMany' && relationEmbeddedId && relationEmbeddedId.length>0){
           promise = adapter.findMany(store, relationModel, relationEmbeddedId, opts);
       }else if ((relationType === 'belongsTo' || relationType === 'hasOne') && relationEmbeddedId) {
           promise = adapter.findRecord(store, relationModel, relationEmbeddedId, opts);
@@ -602,12 +486,11 @@ DS.IndexedDBAdapter = DS.Adapter.extend({
   },
 
   addEmbeddedPayload: function(payload, relationshipName, relationshipRecord) {
-    if ((relationshipRecord && relationshipRecord.id){
-      relationshipRecord=[relationshipRecord];
-    }
-    if(relationshipRecord && relationshipRecord.length && relationshipRecord.isEvery("id"))) {
-        payload['__included__'] = payload['__included__']||{};
-        payload['__included__'][relationshipName] = relationshipRecord;
+    payload['__included__'] = payload['__included__']||[];
+    if (relationshipRecord && relationshipRecord.data && relationshipRecord.data.id){
+      payload['__included__'].push(relationshipRecord.data);
+    }else if(relationshipRecord && relationshipRecord.data && relationshipRecord.data.length && relationshipRecord.data.isEvery("id")) {
+        Ember.$.merge(payload['__included__'],relationshipRecord.data );
     }
     return payload;
   },

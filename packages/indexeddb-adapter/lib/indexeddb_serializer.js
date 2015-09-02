@@ -53,8 +53,7 @@ serializeAttribute: function(snapshot, json, key, attribute) {
       // if provided, use the mapping provided by `attrs` in
       // the serializer
       var payloadKey =  this._getMappedKey(key);
-
-      json[payloadKey.camelize()] = value;
+      json[payloadKey] = value;
     }
   },
   /**
@@ -72,9 +71,6 @@ serializeAttribute: function(snapshot, json, key, attribute) {
       // if provided, use the mapping provided by `attrs` in
       // the serializer
       var payloadKey = this._getMappedKey(key);
-      if (payloadKey === key && this.keyForRelationship) {
-        payloadKey = this.keyForRelationship(key, "belongsTo", "serialize");
-      }
 
       //Need to check whether the id is there for new&async records
       if (Ember.isNone(belongsToId)) {
