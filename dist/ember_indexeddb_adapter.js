@@ -26,8 +26,6 @@ DS.IndexedDBSerializer = DS.JSONAPISerializer.extend({
         this.serializeBelongsTo(snapshot, json, relationship);
       } else if (relationship.kind === 'hasMany') {
         this.serializeHasMany(snapshot, json, relationship);
-      } else if (relationship.kind === 'hasOne') {
-        this.serializeHasOne(snapshot, json, relationship);
       }
     }, this);
 
@@ -55,8 +53,7 @@ serializeAttribute: function(snapshot, json, key, attribute) {
       // if provided, use the mapping provided by `attrs` in
       // the serializer
       var payloadKey =  this._getMappedKey(key);
-
-      json[payloadKey.camelize()] = value;
+      json[payloadKey] = value;
     }
   },
   /**
@@ -74,9 +71,6 @@ serializeAttribute: function(snapshot, json, key, attribute) {
       // if provided, use the mapping provided by `attrs` in
       // the serializer
       var payloadKey = this._getMappedKey(key);
-      if (payloadKey === key && this.keyForRelationship) {
-        payloadKey = this.keyForRelationship(key, "belongsTo", "serialize");
-      }
 
       //Need to check whether the id is there for new&async records
       if (Ember.isNone(belongsToId)) {
@@ -99,27 +93,10 @@ serializeAttribute: function(snapshot, json, key, attribute) {
   */
   serializeHasMany: function(snapshot, json, relationship) {
   },
-  serializeHasOne: function(snapshot, json, relationship) {
-  },
   modelNameFromPayloadKey: function(key) {
     return key;
   },
 });
-/*global Ember*/
-/*global DS*/
-'use strict';
-
-/**
- * SmartSearch allows the adapter to make queries that are broader and that
- * will, in most business cases, yield more relevant results.
- *
- * It has a drawback, though: less performant queries. It shouldn't be a problem
- * for smaller data stores.
- */
-DS.IndexedDBSmartSearch = Ember.Object.extend({
-
-});
-
 /*global Ember*/
 /*global DS*/
  
@@ -411,19 +388,14 @@ DS.IndexedDBAdapter = DS.Adapter.extend({
   },
   loadIds: function(store, type, record){
     var adapter=this;
-    var relationshipNames = Ember.get(type, 'relationshipNames').hasMany.concat(Ember.get(type, 'relationshipNames').hasOne);
-    var relationshipsByName= Ember.get(type, 'relationshipsByName');
+    var relationshipNames = Ember.get(type, 'relationshipNames').hasMany;
     var relationshipsPromises=[];
     var tableName,columnName,promise;
     relationshipNames.forEach(function(relationshipName){
       tableName=adapter.relationshipProperties(type, relationshipName).type.camelize();
       columnName=type.modelName.camelize();
-      promise= adapter.get("db")[tableName].where(columnName).equals(record.id).toArray().then(function(subRercords){
-        if(relationshipsByName.get(relationshipName).kind==='hasMany'){
-          record[relationshipName]=subRercords.map(function(subRecord){ return subRecord.id;});
-        }else if(relationshipsByName.get(relationshipName).kind==='hasOne'){
-          record[relationshipName]=Ember.isArray(subRercords)&&subRercords.length>0?subRercords[0].id:null;
-        }
+      promise= adapter.get("db")[tableName].where(columnName).equals(record.id).toArray().then(function(gameTiers){
+        record[relationshipName]=gameTiers.map(function(gameTier){ return gameTier.id;});
         return Ember.RSVP.resolve(record);
         });
       relationshipsPromises.push(promise);

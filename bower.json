@@ -6,9 +6,9 @@
   ],
   "dependencies": {
     "jquery": "~1.9",
-    "ember": "~1",
-    "ember-data": "1.13.5",
-    "Dexie": "1.1"
+    "ember": "~2",
+    "ember-data": "~2",
+    "Dexie": "1.1.0"
   },
   "devDependencies": {
     "qunit": ""
