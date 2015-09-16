@@ -1,1 +1,8 @@
-bower_components/
+tmp-update
+/dist
+/tmp
+/node_modules
+/bower_components
+/.idea
+npm-debug.log
+testem.log
