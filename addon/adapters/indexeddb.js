@@ -236,7 +236,7 @@ export default DS.Adapter.extend({
    * @param {Object} snapshot
    */
   deleteRecord: function (store, type, snapshot) {
-    if(snapshot.attr("data_status")!=="s" && snapshot.attr("data_status")!=="u"){
+    if(!snapshot.attr("data_status") || (snapshot.attr("data_status")!=="s" && snapshot.attr("data_status")!=="u")){
       return this.get("db")[type.modelName.camelize()].delete(snapshot.id).then(function(){
         return Ember.RSVP.resolve(snapshot.id);
       });
@@ -394,7 +394,7 @@ export default DS.Adapter.extend({
     relationshipNames=relationshipNames.belongsTo.concat(relationshipNames.hasMany);
     var relationshipsByName=Ember.get(type,"relationshipsByName");
     return relationshipNames.filter(function(relationshipName){
-      return relationshipsByName.get(relationshipName).options && !relationshipsByName.get(relationshipName).options.async
+      return !relationshipsByName.get(relationshipName).options || !relationshipsByName.get(relationshipName).options.async
         ||preloadFields.indexOf(relationshipName);
     });
   }
